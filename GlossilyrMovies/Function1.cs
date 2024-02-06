@@ -1,17 +1,31 @@
-using System;
-using System.IO;
-using System.Net;
-using System.Text;
-using System.Text.Json;
-using System.Threading.Tasks;
+//using System;
+//using System.IO;
+//using System.Net;
+//using System.Text;
+//using System.Text.Json;
+//using System.Threading.Tasks;
+//using Microsoft.Azure.Functions.Worker;
+//using Microsoft.Azure.Functions.Worker.Http;
+//using Microsoft.Extensions.Logging;
+//using Azure.Storage.Blobs;
+//using Azure.Messaging.EventGrid;
+//using Azure;
+//using Azure.Messaging.EventHubs;
+//using Microsoft.Azure.Amqp.Framing;
+//using Newtonsoft.Json;
+//using System.Collections.Concurrent;
+//using Microsoft.Azure.WebJobs.Extensions.EventGrid;
+//using Microsoft.Azure.EventGrid.Models;
+
+using Azure;
+using Azure.Messaging.EventGrid;
+using Azure.Storage.Blobs;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
-using Azure.Storage.Blobs;
-using Azure.Messaging.EventGrid;
-using Azure;
-using System.Reflection.Metadata;
 using Newtonsoft.Json;
+using System.Net;
+using System.Text;
 
 namespace GlossilyrMovies
 {
@@ -123,6 +137,12 @@ namespace GlossilyrMovies
             {
                 _logger.LogError($"Error processing blob: {ex.Message}");
             }
+        }
+
+        [Function("Function3")]
+        public async Task RunF3([EventGridTrigger] EventGridEvent eventGrid)
+        {
+            _logger.LogInformation($"Event Grid event received: {eventGrid.Id}");
         }
 
 
