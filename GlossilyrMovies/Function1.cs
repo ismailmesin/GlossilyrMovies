@@ -1,24 +1,6 @@
-//using System;
-//using System.IO;
-//using System.Net;
-//using System.Text;
-//using System.Text.Json;
-//using System.Threading.Tasks;
-//using Microsoft.Azure.Functions.Worker;
-//using Microsoft.Azure.Functions.Worker.Http;
-//using Microsoft.Extensions.Logging;
-//using Azure.Storage.Blobs;
-//using Azure.Messaging.EventGrid;
-//using Azure;
-//using Azure.Messaging.EventHubs;
-//using Microsoft.Azure.Amqp.Framing;
-//using Newtonsoft.Json;
-//using System.Collections.Concurrent;
-//using Microsoft.Azure.WebJobs.Extensions.EventGrid;
-//using Microsoft.Azure.EventGrid.Models;
-
 using Azure;
 using Azure.Messaging.EventGrid;
+using Azure.Messaging.ServiceBus;
 using Azure.Storage.Blobs;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
@@ -70,7 +52,7 @@ namespace GlossilyrMovies
 
 
 
-        [Function("RunF2")]
+        [Function("Function2")]
         public async Task RunF2([BlobTrigger("films/{id}", Connection = "connString")] Stream stream, string Id)
         {
             _logger.LogInformation("C# Blob trigger function processed a blob.");
@@ -117,7 +99,7 @@ namespace GlossilyrMovies
                             "UpdatedMovies",
                             "Movies.Modified",
                             "1.0",
-                            movies
+                            moviesWrapper
                         );
 
                     try
@@ -143,6 +125,55 @@ namespace GlossilyrMovies
         public async Task RunF3([EventGridTrigger] EventGridEvent eventGrid)
         {
             _logger.LogInformation($"Event Grid event received: {eventGrid.Id}");
+
+            try
+            {
+                // Deserialize the EventGridEvent.Data into MoviesWrapper
+                var moviesWrapper = eventGrid.Data.ToObjectFromJson<MoviesWrapper>(); // JsonConvert.DeserializeObject<MoviesWrapper>(eventGrid.Data.ToString());
+
+                if (moviesWrapper != null)
+                {
+                    // Now you have access to the list of movies
+                    List<Movie> movies = moviesWrapper.Movies;
+
+                    if (movies != null)
+                    {
+                        // Filter movies with a rating of 2 or below
+                        var lowRatedMovies = movies.Where(movie => movie.rating.HasValue && movie.rating <= 2).ToList();
+
+                        // Perform actions with the filtered movies
+                        foreach (var lowRatedMovie in lowRatedMovies)
+                        {
+                            _logger.LogInformation($"Low-rated Movie ID: {lowRatedMovie.id}, Name: {lowRatedMovie.name}, Genre: {lowRatedMovie.genre}, Rating: {lowRatedMovie.rating}");
+                        }
+
+                        //// the client that owns the connection and can be used to create senders and receivers
+                        string serviceBusConnectionString = "Endpoint=sb://sb-glossilyr.servicebus.windows.net/;SharedAccessKeyName=sb-policySend;SharedAccessKey=zcA4F6GD0aDbbOsiUc3FDVM9eAiCBvMoc+ASbLh/LZY=;EntityPath=sbt-glossilyrtopic";
+
+                        // Create a ServiceBusClient
+                        ServiceBusClient client = new ServiceBusClient(serviceBusConnectionString);
+
+                        // Create a ServiceBusSender for the topic
+                        ServiceBusSender sender = client.CreateSender("sbt-glossilyrtopic");
+
+                        // Create a message using the filtered todo items
+                        ServiceBusMessage message = new ServiceBusMessage(JsonConvert.SerializeObject(lowRatedMovies));
+
+                        // Send the message
+                        await sender.SendMessageAsync(message);
+
+                        await sender.DisposeAsync();
+                        await client.DisposeAsync();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error processing Event Grid event: {ex.Message}");
+            }
+
+            _logger.LogInformation("Todo items successfully sent to Service Bus topic.");
+
         }
 
 
@@ -153,8 +184,6 @@ namespace GlossilyrMovies
         [JsonProperty("movies")]
         public List<Movie> Movies { get; set; }
     }
-
-
 
 
     public class Movie
