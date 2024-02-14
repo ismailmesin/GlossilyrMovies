@@ -2,6 +2,7 @@ using Azure;
 using Azure.Messaging.EventGrid;
 using Azure.Messaging.ServiceBus;
 using Azure.Storage.Blobs;
+using Microsoft.Azure.Cosmos;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
@@ -177,10 +178,46 @@ namespace GlossilyrMovies
         }
 
 
+        [Function("Function4")]
+        public async Task RunF4([ServiceBusTrigger("sbt-glossilyrtopic", "sb-Glossilyr", Connection = "sbConnString")] string message)
+        {
+            _logger.LogInformation($"Service Bus message received:");
+
+            string cosmosEndpointUrl = "https://db-glossilyr.documents.azure.com:443/";
+            string cosmosPrimaryKey = "Lbm12Gvor8hUI9R7sRuXiKhkWzBmgneXgfzPZyep4rC1Alrk5KY5pbqYEPI6ISESFRHLP2tIl8taACDb64YZfA==";
+
+            CosmosClient client = new CosmosClient(cosmosEndpointUrl, cosmosPrimaryKey);
+            string databaseName = "db-glossilyr";
+
+            DatabaseResponse dbResponse = await client.CreateDatabaseIfNotExistsAsync(databaseName);
+            Console.WriteLine(dbResponse.Database.Id);
+
+
+            ContainerResponse cResponse = await dbResponse.Database.CreateContainerIfNotExistsAsync("movies2", "/id");
+            Console.WriteLine(cResponse.Container.Id);
+
+            var moviesWrapper = JsonConvert.DeserializeObject<List<MoviesWrapper>>(message.ToString());
+
+            foreach (var i in moviesWrapper)
+            {
+
+                await cResponse.Container.CreateItemAsync<MoviesWrapper>(i, new PartitionKey(i.id.ToString()));
+
+            }
+
+
+            _logger.LogInformation("Todo items successfully sent to Cosmos DB.");
+        }
+
     }
 
     public class MoviesWrapper
     {
+        public MoviesWrapper()
+        {
+            id = Guid.NewGuid();
+        }
+        public Guid id { get; set; }
         [JsonProperty("movies")]
         public List<Movie> Movies { get; set; }
     }
@@ -188,8 +225,12 @@ namespace GlossilyrMovies
 
     public class Movie
     {
+        public Movie()
+        {
+            id = Guid.NewGuid();
+        }
         [JsonProperty("id")]
-        public string id { get; set; }
+        public Guid id { get; set; }
 
         [JsonProperty("name")]
         public string name { get; set; }
